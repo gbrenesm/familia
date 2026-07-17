@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState, useRef } from "react";
+import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
   ReactFlow,
@@ -16,7 +16,8 @@ import TreeHeader from "./TreeHeader";
 import TreeLegend from "./TreeLegend";
 import NodeContextMenu from "./NodeContextMenu";
 import AddPersonPanel from "./AddPersonPanel";
-import { createPersonWithRelation } from "@/app/arbol-familiar/actions";
+import { createPersonWithRelation, getPotentialPartners } from "@/app/arbol-familiar/actions";
+import type { PotentialPartner } from "@/app/arbol-familiar/actions";
 import type { AddPersonData } from "./AddPersonPanel";
 import type { PersonNodeData } from "./PersonNode";
 
@@ -26,6 +27,8 @@ type PersonInput = {
   first_lastname: string;
   second_lastname: string | null;
   gender: "mujer" | "hombre" | "no encontrado";
+  birth_date?: string | null;
+  death_date?: string | null;
 };
 
 type RelationInput = {
@@ -67,11 +70,11 @@ function buildTree(
 ) {
   const personMap = new Map(persons.map((p) => [p.id, p]));
   const visited = new Set<string>();
-  const nodes: { id: string; type: string; position: { x: number; y: number }; data: PersonNodeData }[] = [];
-  const edges: { id: string; source: string; target: string; style?: object }[] = [];
+  const positionMap = new Map<string, { x: number; y: number; generation: number }>();
 
-  const X_GAP = 200;
+  const X_GAP = 280;
   const Y_GAP = 180;
+  const PARTNER_GAP = 280;
 
   type QueueItem = { id: string; x: number; y: number; generation: number };
   const queue: QueueItem[] = [{ id: rootId, x: 0, y: 0, generation: 0 }];
@@ -82,18 +85,7 @@ function buildTree(
     const person = personMap.get(id);
     if (!person) continue;
 
-    nodes.push({
-      id,
-      type: "person",
-      position: { x, y },
-      data: {
-        label: getLabel(person),
-        initials: getInitials(person),
-        dates: "",
-        gender: person.gender,
-        generation,
-      },
-    });
+    positionMap.set(id, { x, y, generation });
 
     if (generation >= maxGenerations) continue;
 
@@ -101,42 +93,94 @@ function buildTree(
       (r) => r.first_person_id === id || r.second_person_id === id
     );
 
-    let childIndex = 0;
+    const partnerRel = personRelations.find((r) => r.type === "compañerxs");
+    const partnerId = partnerRel
+      ? (partnerRel.first_person_id === id ? partnerRel.second_person_id : partnerRel.first_person_id)
+      : null;
+    const partnerPos = partnerId ? positionMap.get(partnerId) : null;
+    const midX = partnerPos ? (x + partnerPos.x) / 2 : x;
+
+    const children: string[] = [];
     let parentIndex = 0;
+
     for (const rel of personRelations) {
       const otherId = rel.first_person_id === id ? rel.second_person_id : rel.first_person_id;
       if (visited.has(otherId)) continue;
-      visited.add(otherId);
-
-      let newX: number;
-      let newY: number;
 
       const isParentOfOther = rel.type === "padre_hijx" || rel.type === "madre_hijx";
       const otherIsParent = isParentOfOther && rel.second_person_id === id;
-      const otherIsChild = isParentOfOther && rel.first_person_id === id;
 
       if (rel.type === "compañerxs") {
-        newX = x + X_GAP;
-        newY = y;
+        visited.add(otherId);
+        queue.push({ id: otherId, x: x + PARTNER_GAP, y, generation: generation + 1 });
       } else if (otherIsParent) {
-        newX = x + (parentIndex - 0.5) * X_GAP;
-        newY = y - Y_GAP;
+        visited.add(otherId);
+        const newX = x + (parentIndex - 0.5) * PARTNER_GAP;
+        queue.push({ id: otherId, x: newX, y: y - Y_GAP, generation: generation + 1 });
         parentIndex++;
       } else {
-        newX = x + (childIndex - 1) * X_GAP;
-        newY = y + Y_GAP;
-        childIndex++;
+        children.push(otherId);
       }
+    }
 
-      queue.push({ id: otherId, x: newX, y: newY, generation: generation + 1 });
+    if (children.length > 0) {
+      const totalWidth = (children.length - 1) * X_GAP;
+      const startX = midX - totalWidth / 2;
+      children.forEach((childId, i) => {
+        visited.add(childId);
+        queue.push({ id: childId, x: startX + i * X_GAP, y: y + Y_GAP, generation: generation + 1 });
+      });
+    }
+  }
 
+  const nodes = Array.from(positionMap.entries()).map(([id, pos]) => {
+    const person = personMap.get(id)!;
+    const dates = [person.birth_date, person.death_date].filter(Boolean).join("–") || "";
+    return {
+      id,
+      type: "person",
+      position: { x: pos.x, y: pos.y },
+      data: {
+        label: getLabel(person),
+        initials: getInitials(person),
+        dates,
+        gender: person.gender,
+        generation: pos.generation,
+      } as PersonNodeData,
+    };
+  });
+
+  const nodeIds = new Set(positionMap.keys());
+  const edges: { id: string; source: string; target: string; sourceHandle?: string; targetHandle?: string; type?: string; style?: object }[] = [];
+
+  for (const rel of relations) {
+    if (!nodeIds.has(rel.first_person_id) || !nodeIds.has(rel.second_person_id)) continue;
+
+    if (rel.type === "compañerxs") {
+      const pos1 = positionMap.get(rel.first_person_id)!;
+      const pos2 = positionMap.get(rel.second_person_id)!;
+      const leftId = pos1.x <= pos2.x ? rel.first_person_id : rel.second_person_id;
+      const rightId = pos1.x <= pos2.x ? rel.second_person_id : rel.first_person_id;
       edges.push({
         id: rel.id,
-        source: otherIsParent ? otherId : id,
-        target: otherIsParent ? id : otherId,
-        style: rel.type === "compañerxs"
-          ? { stroke: "#1F3350", strokeWidth: 2 }
-          : { stroke: "#3D362B", strokeWidth: 2 },
+        source: leftId,
+        target: rightId,
+        sourceHandle: "right",
+        targetHandle: "left",
+        type: "straight",
+        style: { stroke: "#3D362B", strokeWidth: 2 },
+      });
+    } else {
+      const parentId = rel.first_person_id;
+      const childId = rel.second_person_id;
+      edges.push({
+        id: rel.id,
+        source: parentId,
+        target: childId,
+        sourceHandle: "bottom",
+        targetHandle: "top",
+        type: "smoothstep",
+        style: { stroke: "#3D362B", strokeWidth: 2 },
       });
     }
   }
@@ -160,6 +204,7 @@ function FamilyTreeInner({ persons, relations, rootPersonId }: Props) {
     relationType: RelationOption;
     personId: string;
     personName: string;
+    potentialPartners: PotentialPartner[];
   } | null>(null);
 
   const flowRef = useRef<HTMLDivElement>(null);
@@ -170,8 +215,13 @@ function FamilyTreeInner({ persons, relations, rootPersonId }: Props) {
     return { initialNodes: nodes, initialEdges: edges };
   }, [persons, relations, rootId, generations]);
 
-  const [nodes, , onNodesChange] = useNodesState(initialNodes);
-  const [edges, , onEdgesChange] = useEdgesState(initialEdges);
+  const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
+  const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
+
+  useEffect(() => {
+    setNodes(initialNodes);
+    setEdges(initialEdges);
+  }, [initialNodes, initialEdges, setNodes, setEdges]);
 
   const personOptions = useMemo(
     () => persons.map((p) => ({ id: p.id, label: getFullLabel(p) })),
@@ -198,14 +248,18 @@ function FamilyTreeInner({ persons, relations, rootPersonId }: Props) {
   );
 
   const handleContextSelect = useCallback(
-    (option: RelationOption) => {
+    async (option: RelationOption) => {
       if (!contextMenu) return;
       const person = persons.find((p) => p.id === contextMenu.nodeId);
       if (!person) return;
+
+      const potentialPartners = await getPotentialPartners(contextMenu.nodeId, option);
+
       setPanel({
         relationType: option,
         personId: contextMenu.nodeId,
         personName: getFullLabel(person),
+        potentialPartners,
       });
       setContextMenu(null);
     },
@@ -219,8 +273,10 @@ function FamilyTreeInner({ persons, relations, rootPersonId }: Props) {
         name: data.name,
         first_lastname: data.first_lastname,
         second_lastname: data.second_lastname,
+        gender: data.gender,
         relationType: panel.relationType,
         relatedPersonId: panel.personId,
+        partnerId: data.partnerId,
       });
       setPanel(null);
       router.refresh();
@@ -284,6 +340,7 @@ function FamilyTreeInner({ persons, relations, rootPersonId }: Props) {
         <AddPersonPanel
           relationType={panel.relationType}
           relatedPersonName={panel.personName}
+          potentialPartners={panel.potentialPartners}
           onSave={handleSave}
           onCancel={() => setPanel(null)}
         />

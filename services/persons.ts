@@ -19,15 +19,22 @@ export type PersonDetail = Person & {
   family: FamilyMember[];
 };
 
+export type PersonWithDates = Person & {
+  birth_date: string | null;
+  death_date: string | null;
+};
+
 export async function getPersons() {
-  return await sql<Person[]>`
+  return await sql<PersonWithDates[]>`
     SELECT
       p.id,
       p.name,
       p.first_lastname,
       p.second_lastname,
       p.gender,
-      p.completed
+      p.completed,
+      (SELECT e.date FROM events e INNER JOIN person_events pe ON pe.event_id = e.id WHERE pe.person_id = p.id AND e.type = 'nacimiento' AND e.deleted_at IS NULL LIMIT 1) AS birth_date,
+      (SELECT e.date FROM events e INNER JOIN person_events pe ON pe.event_id = e.id WHERE pe.person_id = p.id AND e.type = 'defunción' AND e.deleted_at IS NULL LIMIT 1) AS death_date
     FROM persons p
     WHERE p.deleted_at IS NULL
   `;
@@ -73,6 +80,8 @@ export async function getPersonDetailById(id: string): Promise<PersonDetail | nu
       SELECT
         d.id,
         d.url,
+        d.name,
+        d.source,
         d.event_id
       FROM documents d
       WHERE d.person_id = ${id}

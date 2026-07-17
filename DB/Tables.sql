@@ -75,6 +75,8 @@ CREATE TABLE person_events (
 CREATE TABLE documents (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     url TEXT NOT NULL,
+    name TEXT,
+    source TEXT,
     person_id UUID NOT NULL,
     event_id UUID NOT NULL,
 
@@ -97,7 +99,9 @@ CREATE TABLE documents (
 CREATE TABLE photos (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     url TEXT NOT NULL,
+    name TEXT,
     description TEXT,
+    source TEXT,
     person_id UUID NOT NULL,
 
     created_at TIMESTAMP DEFAULT NOW(),

@@ -4,9 +4,17 @@ import { useState } from "react";
 
 type RelationType = "madre" | "padre" | "pareja" | "hijo";
 
+type PartnerOption = {
+  id: string;
+  name: string | null;
+  first_lastname: string;
+  second_lastname: string | null;
+};
+
 type Props = {
   relationType: RelationType;
   relatedPersonName: string;
+  potentialPartners: PartnerOption[];
   onSave: (data: AddPersonData) => void;
   onCancel: () => void;
 };
@@ -15,6 +23,8 @@ export type AddPersonData = {
   name: string;
   first_lastname: string;
   second_lastname: string;
+  gender?: "mujer" | "hombre" | "no encontrado";
+  partnerId?: string;
   union_type?: "matrimonio" | "union_libre";
   date_start?: string;
   date_end?: string;
@@ -37,21 +47,30 @@ const subtitles: Record<RelationType, (name: string) => string> = {
 export default function AddPersonPanel({
   relationType,
   relatedPersonName,
+  potentialPartners,
   onSave,
   onCancel,
 }: Props) {
   const [name, setName] = useState("");
   const [firstLastname, setFirstLastname] = useState("");
   const [secondLastname, setSecondLastname] = useState("");
+  const [gender, setGender] = useState<"mujer" | "hombre" | "no encontrado">("no encontrado");
+  const [partnerId, setPartnerId] = useState<string>("");
   const [unionType, setUnionType] = useState<"matrimonio" | "union_libre">("matrimonio");
   const [dateStart, setDateStart] = useState("");
   const [dateEnd, setDateEnd] = useState("");
+
+  const showPartnerQuestion = (relationType === "madre" || relationType === "padre" || relationType === "hijo") && potentialPartners.length > 0;
+
+  const showGender = relationType === "hijo" || relationType === "pareja";
 
   const handleSubmit = () => {
     onSave({
       name,
       first_lastname: firstLastname,
       second_lastname: secondLastname,
+      gender: showGender ? gender : undefined,
+      partnerId: partnerId || undefined,
       ...(relationType === "pareja" && {
         union_type: unionType,
         date_start: dateStart,
@@ -135,6 +154,50 @@ export default function AddPersonPanel({
         />
       </div>
 
+      {showGender && (
+        <div style={{ marginBottom: 20 }}>
+          <label style={labelStyle}>Género</label>
+          <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
+            {(["mujer", "hombre", "no encontrado"] as const).map((g) => (
+              <button
+                key={g}
+                onClick={() => setGender(g)}
+                style={{
+                  ...pillStyle,
+                  backgroundColor: gender === g ? "#1F3350" : "#E9DBB8",
+                  color: gender === g ? "#F1E6CC" : "#3D362B",
+                  borderColor: gender === g ? "#1F3350" : "#B8A576",
+                }}
+              >
+                {g === "no encontrado" ? "No encontrado" : g.charAt(0).toUpperCase() + g.slice(1)}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {showPartnerQuestion && (
+        <div style={{ marginBottom: 20 }}>
+          <label style={labelStyle}>
+            {relationType === "hijo"
+              ? "¿Quién es el otro progenitor?"
+              : "¿Es pareja de alguien ya registrado?"}
+          </label>
+          <select
+            value={partnerId}
+            onChange={(e) => setPartnerId(e.target.value)}
+            style={inputStyle}
+          >
+            <option value="">No / No estoy seguro</option>
+            {potentialPartners.map((p) => (
+              <option key={p.id} value={p.id}>
+                {`${p.name || ""} ${p.first_lastname} ${p.second_lastname || ""}`.trim()}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
       {relationType === "pareja" && (
         <>
           <div style={{ marginBottom: 20 }}>
@@ -192,7 +255,7 @@ export default function AddPersonPanel({
         </>
       )}
 
-      <div style={{ display: "flex", gap: 16, marginTop: "auto", paddingTop: 24 }}>
+      <div style={{ display: "flex", gap: 16, paddingTop: 24 }}>
         <button onClick={onCancel} style={cancelButtonStyle}>
           Cancelar
         </button>
@@ -207,11 +270,12 @@ export default function AddPersonPanel({
 const labelStyle: React.CSSProperties = {
   display: "block",
   fontSize: 11,
-  fontWeight: 700,
+  fontWeight: 500,
   letterSpacing: 1,
   color: "#6B5D45",
   textTransform: "uppercase",
   marginBottom: 6,
+  fontFamily: "var(--font-jetbrains), monospace",
 };
 
 const inputStyle: React.CSSProperties = {
@@ -223,6 +287,7 @@ const inputStyle: React.CSSProperties = {
   fontSize: 14,
   color: "#3D362B",
   outline: "none",
+  fontFamily: "var(--font-lora), Georgia, serif",
 };
 
 const pillStyle: React.CSSProperties = {
@@ -246,12 +311,12 @@ const cancelButtonStyle: React.CSSProperties = {
 
 const saveButtonStyle: React.CSSProperties = {
   padding: "10px 24px",
-  backgroundColor: "#9E3A32",
+  backgroundColor: "#1F3350",
   border: "none",
   borderRadius: 8,
   color: "#F1E6CC",
   fontSize: 14,
   fontWeight: 600,
   cursor: "pointer",
-  boxShadow: "0 2px 8px rgba(158,58,50,0.3)",
+  boxShadow: "0 2px 8px rgba(31,51,80,0.3)",
 };

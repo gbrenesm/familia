@@ -35,10 +35,11 @@ export default function TreeHeader({
         <span
           style={{
             fontSize: 11,
-            fontWeight: 700,
+            fontWeight: 500,
             letterSpacing: 1.5,
             color: "#6B5D45",
             textTransform: "uppercase",
+            fontFamily: "var(--font-jetbrains), monospace",
           }}
         >
           Raíz
@@ -69,10 +70,11 @@ export default function TreeHeader({
         <span
           style={{
             fontSize: 11,
-            fontWeight: 700,
+            fontWeight: 500,
             letterSpacing: 1.5,
             color: "#6B5D45",
             textTransform: "uppercase",
+            fontFamily: "var(--font-jetbrains), monospace",
           }}
         >
           Generaciones ±{generations}

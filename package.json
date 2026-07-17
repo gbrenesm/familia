@@ -9,11 +9,13 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@uploadthing/react": "^7.3.3",
     "@xyflow/react": "^12.11.2",
     "next": "16.2.10",
     "postgres": "^3.4.9",
     "react": "19.2.4",
-    "react-dom": "19.2.4"
+    "react-dom": "19.2.4",
+    "uploadthing": "^7.7.4"
   },
   "devDependencies": {
     "@types/node": "26.1.1",
